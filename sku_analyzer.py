@@ -97,9 +97,46 @@ if data_source == "Upload CSV File":
     )
     
     if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        df['date'] = pd.to_datetime(df['date'])
-        df['total_revenue'] = df['quantity_sold'] * df['unit_price']
+        try:
+            # Try to read the CSV with different parameters to handle various formats
+            df = pd.read_csv(uploaded_file)
+            
+            # Check if we have the expected columns
+            expected_columns = ['date', 'sku', 'product_name', 'quantity_sold', 'unit_price']
+            
+            # If we don't have the right columns, try reading with different quoting
+            if not all(col in df.columns for col in expected_columns):
+                # Reset file pointer and try with different quoting
+                uploaded_file.seek(0)
+                df = pd.read_csv(uploaded_file, quoting=1)  # QUOTE_ALL
+                
+            # If still no luck, try without quotes
+            if not all(col in df.columns for col in expected_columns):
+                uploaded_file.seek(0)
+                df = pd.read_csv(uploaded_file, quotechar='"', skipinitialspace=True)
+            
+            # Check again and show helpful error if columns are still missing
+            missing_columns = [col for col in expected_columns if col not in df.columns]
+            if missing_columns:
+                st.error(f"Missing required columns: {missing_columns}")
+                st.error(f"Found columns: {list(df.columns)}")
+                st.info("Please ensure your CSV has columns: date, sku, product_name, quantity_sold, unit_price")
+                df = load_data()  # Fall back to sample data
+            else:
+                # Process the uploaded data
+                df['date'] = pd.to_datetime(df['date'])
+                # Create total_revenue if it doesn't exist
+                if 'total_revenue' not in df.columns:
+                    df['total_revenue'] = df['quantity_sold'] * df['unit_price']
+                # Add category if missing
+                if 'category' not in df.columns:
+                    df['category'] = 'General'
+                st.success("✅ Data uploaded successfully!")
+                
+        except Exception as e:
+            st.error(f"Error reading CSV file: {str(e)}")
+            st.info("Using sample data instead. Please check your CSV format.")
+            df = load_data()
     else:
         df = load_data()
 else:
